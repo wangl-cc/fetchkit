@@ -102,7 +102,6 @@ impl<T, E: Into<Error>> WithDesc<T> for std::result::Result<T, E> {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-// module
 #[cfg(test)]
 mod tests {
     use super::*;

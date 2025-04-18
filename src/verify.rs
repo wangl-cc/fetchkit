@@ -8,6 +8,8 @@ pub trait VerifierBuilder {
     fn build(&self) -> Result<Self::Verifier<'_>>;
 }
 
+const READ_BUF_SIZE: usize = 0x2000; // 8KB, which is the same as std::io::copy
+
 /// A trait representing a verifier that can verify data
 pub trait Verifier: Sized {
     /// Update the verifier with given data.
@@ -19,8 +21,6 @@ pub trait Verifier: Sized {
     ///
     /// If failed to read from the reader, return an error with kind `IO`.
     fn update_reader<R: std::io::Read>(&mut self, reader: &mut R) -> Result<()> {
-        const READ_BUF_SIZE: usize = 0x2000; // 8KB, which is the same as std::io::copy
-
         let mut buf = [0; READ_BUF_SIZE];
         loop {
             let n = reader.read(&mut buf)?;
@@ -208,8 +208,7 @@ pub mod size {
             // Test with incorrect size
             let builder = SizeVerifierBuilder::new(expected_size);
             let mut verifier = builder.build().unwrap();
-
-            let wrong_data = b"12345"; // Too short
+            let wrong_data = vec![0; READ_BUF_SIZE + 10];
             let mut cursor = std::io::Cursor::new(wrong_data);
 
             verifier
@@ -296,6 +295,12 @@ pub mod digest {
             0x0d, 0x2e, 0xd1, 0xc1, 0xcd, 0x2a, 0x1e, 0xc0,
             0xfb, 0x85, 0xd2, 0x99, 0xa1, 0x92, 0xa4, 0x47,
         ];
+
+        #[test]
+        fn test_invalid_hash() {
+            let builder = HashVerifierBuilder::<Sha256>::new(&[0, 1, 2, 3]);
+            assert!(builder.build().is_err(), "Should fail with invalid hash");
+        }
 
         #[test]
         fn test_verify_hash() {
