@@ -103,6 +103,7 @@ impl<T, E: Into<Error>> WithDesc<T> for std::result::Result<T, E> {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
