@@ -5,7 +5,7 @@ use std::{
 };
 
 use fetchkit::{
-    error::{Error, ErrorKind, Result},
+    error::{ErrorKind, Result},
     extract::{Archive, ArchiveFile},
 };
 use tempfile::TempDir;
@@ -86,22 +86,39 @@ fn selective_mapper(output_dir: &Path) -> impl FnMut(&Path) -> Option<PathBuf> +
 
 #[cfg(feature = "zip")]
 mod zip_tests {
+    use std::io::Write;
+
+    use zip::{ZipWriter, write::FileOptions};
+
     use super::*;
 
     fn create_zip_archive(source_dir: &Path, archive_path: &Path) -> Result<()> {
-        // Create a command to zip the directory
-        let status = std::process::Command::new("zip")
-            .arg("-r")
-            .arg(archive_path)
-            .arg(".")
-            .current_dir(source_dir)
-            .status()
-            .expect("Failed to execute zip command");
+        let file = File::create(archive_path)?;
+        let mut writer = ZipWriter::new(file);
 
-        if !status.success() {
-            return Err(Error::new(ErrorKind::Extract).with_desc("Failed to create zip archive"));
-        }
+        let options: FileOptions<()> =
+            FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
+        // Add file1.txt
+        let file1_path = source_dir.join("file1.txt");
+        let mut file1_content = Vec::new();
+        File::open(&file1_path)?.read_to_end(&mut file1_content)?;
+        writer.start_file("file1.txt", options)?;
+        writer.write_all(&file1_content)?;
+
+        // Add file2.txt inside subdir
+        let file2_path = source_dir.join("subdir").join("file2.txt");
+        let mut file2_content = Vec::new();
+        File::open(&file2_path)?.read_to_end(&mut file2_content)?;
+
+        // For directories, we need to use this separately since options is moved
+        writer.add_directory("subdir", options)?;
+
+        // And the file needs new options too since the previous ones were moved
+        writer.start_file("subdir/file2.txt", options)?;
+        writer.write_all(&file2_content)?;
+
+        writer.finish()?;
         Ok(())
     }
 
