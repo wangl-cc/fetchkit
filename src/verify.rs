@@ -188,6 +188,38 @@ pub mod size {
                     .contains("File size mismatch: expected 10, got 13")
             );
         }
+
+        #[test]
+        fn test_verify_size_with_update_reader() {
+            let expected_size = 10u64;
+            let builder = SizeVerifierBuilder::new(expected_size);
+            let mut verifier = builder.build().unwrap();
+
+            // Create a cursor from the data to simulate a reader
+            let data = b"1234567890";
+            let mut cursor = std::io::Cursor::new(data);
+
+            // Use update_reader to verify the data
+            verifier
+                .update_reader(&mut cursor)
+                .expect("Failed to update from reader");
+            verifier.verify().expect("Verification should succeed");
+
+            // Test with incorrect size
+            let builder = SizeVerifierBuilder::new(expected_size);
+            let mut verifier = builder.build().unwrap();
+
+            let wrong_data = b"12345"; // Too short
+            let mut cursor = std::io::Cursor::new(wrong_data);
+
+            verifier
+                .update_reader(&mut cursor)
+                .expect("Failed to update from reader");
+            assert!(
+                verifier.verify().is_err(),
+                "Should fail with incorrect size"
+            );
+        }
     }
 }
 

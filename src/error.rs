@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     /// I/O error
     Io,
@@ -9,23 +9,7 @@ pub enum ErrorKind {
     /// Network error
     Network,
     /// Any other error not listed above
-    ///
-    /// Note: `Other` error is not equal to self.
     Other,
-}
-
-impl PartialEq for ErrorKind {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Network, Self::Network) => true,
-            (Self::Io, Self::Io) => true,
-            (Self::Verify, Self::Verify) => true,
-            (Self::Extract, Self::Extract) => true,
-            // Other might be any other error kind, so we don't treat it as equal
-            (Self::Other, Self::Other) => false,
-            _ => false,
-        }
-    }
 }
 
 impl std::fmt::Display for ErrorKind {
@@ -117,3 +101,82 @@ impl<T, E: Into<Error>> WithDesc<T> for std::result::Result<T, E> {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_kind_display() {
+        assert_eq!(format!("{}", ErrorKind::Io), "I/O error");
+        assert_eq!(format!("{}", ErrorKind::Verify), "Verification error");
+        assert_eq!(format!("{}", ErrorKind::Extract), "Extraction error");
+        assert_eq!(format!("{}", ErrorKind::Network), "Network error");
+        assert_eq!(format!("{}", ErrorKind::Other), "Other error");
+    }
+
+    #[test]
+    fn test_error_kind_partial_eq() {
+        assert_eq!(ErrorKind::Io, ErrorKind::Io);
+        assert_eq!(ErrorKind::Verify, ErrorKind::Verify);
+        assert_eq!(ErrorKind::Extract, ErrorKind::Extract);
+        assert_eq!(ErrorKind::Network, ErrorKind::Network);
+        assert_eq!(ErrorKind::Other, ErrorKind::Other);
+
+        assert_ne!(ErrorKind::Io, ErrorKind::Network);
+        assert_ne!(ErrorKind::Verify, ErrorKind::Extract);
+        assert_ne!(ErrorKind::Other, ErrorKind::Io);
+    }
+
+    #[test]
+    fn test_error_creation() {
+        let error = Error::new(ErrorKind::Io);
+        assert_eq!(error.kind(), ErrorKind::Io);
+        assert_eq!(error.description(), None);
+
+        let error = Error::new(ErrorKind::Network).with_desc("failed to connect");
+        assert_eq!(error.kind(), ErrorKind::Network);
+        assert_eq!(error.description(), Some("failed to connect"));
+
+        let error = Error::new(ErrorKind::Other).with_desc("failed to other");
+        assert_eq!(error.description(), Some("failed to other"));
+    }
+
+    #[test]
+    fn test_error_with_source() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let error = Error::new(ErrorKind::Io).with_source(io_err);
+        assert_eq!(error.kind(), ErrorKind::Io);
+    }
+
+    #[test]
+    fn test_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let error: Error = io_err.into();
+        assert_eq!(error.kind(), ErrorKind::Io);
+    }
+
+    #[test]
+    fn test_with_desc() {
+        let result: Result<i32> = Ok(42);
+        assert_eq!(result.with_desc("this won't be used").unwrap(), 42);
+        let result: Result<i32> = Ok(42);
+        assert_eq!(
+            result
+                .then_with_desc(|| "this won't be used".to_string())
+                .unwrap(),
+            42
+        );
+
+        let result: std::result::Result<i32, Error> = Err(Error::new(ErrorKind::Network));
+        let err = result.with_desc("connection failed").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Network);
+        assert_eq!(err.description(), Some("connection failed"));
+
+        let result: std::result::Result<i32, Error> = Err(Error::new(ErrorKind::Verify));
+        let err = result
+            .then_with_desc(|| "verification failed".to_string())
+            .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Verify);
+        assert_eq!(err.description(), Some("verification failed"));
+    }
+}
