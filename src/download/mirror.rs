@@ -1,3 +1,5 @@
+//! Module for selecting the fastest mirror based on speedtest.
+
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -143,7 +145,7 @@ mod tests {
         }
     }
 
-    type MockClient = super::super::http::mock::MockClient<MockResponse>;
+    use super::super::http::mock::MockClient;
 
     // Mock HTTP response
     #[derive(Clone)]
@@ -191,17 +193,15 @@ mod tests {
 
         client.add_response("http://fast.mirror.com/file", MockResponse {
             content: content.clone(),
-            chunk_size: 1024, // 10KB per second
+            chunk_size: 1024, // 0.2 seconds to complete
         });
 
         client.add_response("http://slow.mirror.com/file", MockResponse {
             content: content.clone(),
-            chunk_size: 512, // 5KB per second
+            chunk_size: 250, //  0.8 seconds to complete
         });
 
-        // Test with 5KB max bytes and 1 second max time
         let mirrors = &["http://fast.mirror.com/file", "http://slow.mirror.com/file"];
-
         let fast: &str = fastest_mirror(&client, mirrors.iter(), 2000, Duration::from_secs(1))
             .await
             .unwrap();

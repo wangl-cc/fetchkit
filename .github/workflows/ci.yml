@@ -72,7 +72,7 @@ jobs:
           cargo test --all-features --workspace -- --include-ignored
 
   coverage:
-    name: Build and Test
+    name: Code Coverage
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
