@@ -95,8 +95,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Coverage
         run: |
-          cargo llvm-cov --all-features --workspace \
-            --
+          cargo +nightly llvm-cov --all-features --workspace \
             --codecov --output-path codecov.json \
             -- --include-ignored
       - name: Upload to Codecov
