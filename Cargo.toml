@@ -5,6 +5,11 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(coverage,coverage_nightly)',
+] }
+
 [features]
 default = [
   "deflate-default",

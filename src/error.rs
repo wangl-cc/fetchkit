@@ -1,3 +1,5 @@
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     /// I/O error
@@ -101,7 +103,10 @@ impl<T, E: Into<Error>> WithDesc<T> for std::result::Result<T, E> {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+// module
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -112,6 +117,15 @@ mod tests {
         assert_eq!(format!("{}", ErrorKind::Extract), "Extraction error");
         assert_eq!(format!("{}", ErrorKind::Network), "Network error");
         assert_eq!(format!("{}", ErrorKind::Other), "Other error");
+    }
+
+    #[test]
+    fn test_error_display() {
+        let error = Error::new(ErrorKind::Io);
+        assert_eq!(format!("{}", error), "I/O error");
+
+        let error = Error::new(ErrorKind::Network).with_desc("failed to connect");
+        assert_eq!(format!("{}", error), "Network error: failed to connect");
     }
 
     #[test]
