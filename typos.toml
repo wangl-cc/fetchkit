@@ -1,0 +1,5 @@
+[files]
+ignore-hidden = false
+
+[default]
+extend-ignore-words-re = ["flate2"]
