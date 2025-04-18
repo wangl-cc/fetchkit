@@ -76,9 +76,7 @@ where
         progress: Option<impl ProgressReceiverBuilder>,
     ) -> Result<()> {
         let url = if let Some(opts) = self.mirror_options {
-            let mirrors = std::iter::once(self.url);
-            let mirror_other = opts.mirrors.iter().copied();
-            let mirrors = mirrors.chain(mirror_other);
+            let mirrors = std::iter::once(self.url).chain(opts.mirrors.iter().copied());
             mirror::fastest_mirror(client, mirrors, opts.max_bytes, opts.max_time)
                 .await
                 .ok_or(Error::new(ErrorKind::Network).with_desc("No mirrors available"))?
@@ -122,10 +120,12 @@ where
     }
 }
 
+// TODO: move this to mirror.rs and move mirror test into method of this struct
 pub struct MirrorOptions<'m> {
     mirrors: &'m [&'m str],
     max_bytes: u64,
     max_time: Duration,
+    error_handler: Option<Box<dyn FnMut(Error)>>,
 }
 
 impl<'m> MirrorOptions<'m> {
@@ -134,6 +134,13 @@ impl<'m> MirrorOptions<'m> {
             mirrors,
             max_bytes,
             max_time,
+            error_handler: None,
         }
+    }
+
+    /// Register an error handler when an error occurs during testing mirrors.
+    pub fn with_error_handler(mut self, handler: Box<dyn FnMut(Error)>) -> Self {
+        self.error_handler = Some(handler);
+        self
     }
 }
