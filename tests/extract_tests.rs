@@ -17,24 +17,56 @@ fn create_test_files(dir: &Path) -> Result<()> {
     fs::create_dir_all(&subdir_path)?;
 
     // Create a file in the root directory
-    let mut file1 = File::create(dir.join("file1.txt"))?;
+    let file1_path = dir.join("file1.txt");
+    let mut file1 = File::create(&file1_path)?;
     file1.write_all(b"This is file 1")?;
 
     // Create a file in the subdirectory
-    let mut file2 = File::create(subdir_path.join("file2.txt"))?;
+    let file2_path = subdir_path.join("file2.txt");
+    let mut file2 = File::create(&file2_path)?;
     file2.write_all(b"This is file 2")?;
+
+    // Create a symbolic link to file1.txt on unix
+    #[cfg(unix)]
+    {
+        let link_path = dir.join("file1_link.txt");
+        std::os::unix::fs::symlink("file1.txt", link_path)?;
+    }
+
+    verify_identity_extraction(dir)?;
 
     Ok(())
 }
 
-// Helper function to verify extracted files with identity mapper (all files should be extracted)
+// Helper function to create the identity mapper
+fn identity_mapper(output_dir: &Path) -> impl FnMut(&Path) -> Option<PathBuf> {
+    move |path: &Path| Some(output_dir.join(path))
+}
+
+// Helper function to verify extracted files with identity mapper
+#[track_caller]
 fn verify_identity_extraction(extract_dir: &Path) -> Result<()> {
     let file1_path = extract_dir.join("file1.txt");
-    let file2_path = extract_dir.join("subdir/file2.txt");
+    let file2_path = extract_dir.join("subdir").join("file2.txt");
+    let file1_link_path = extract_dir.join("file1_link.txt");
 
     // Check that files exist
-    assert!(file1_path.exists(), "file1.txt should exist");
-    assert!(file2_path.exists(), "file2.txt should exist");
+    assert!(
+        file1_path.is_file(),
+        "file1.txt should be a file ({:?})",
+        file1_path.metadata()
+    );
+    assert!(
+        file2_path.is_file(),
+        "file2.txt should be a file ({:?})",
+        file2_path.metadata()
+    );
+    #[cfg(unix)]
+    assert!(
+        file1_link_path.is_symlink(),
+        "file1_link.txt should be a symlink {:?}",
+        file1_link_path.metadata()
+    );
 
     // Check file contents
     let mut content = String::new();
@@ -45,11 +77,31 @@ fn verify_identity_extraction(extract_dir: &Path) -> Result<()> {
     File::open(file2_path)?.read_to_string(&mut content)?;
     assert_eq!(content, "This is file 2", "file2.txt content mismatch");
 
+    #[cfg(unix)]
+    {
+        content.clear();
+        File::open(file1_link_path)
+            .unwrap()
+            .read_to_string(&mut content)?;
+        assert_eq!(content, "This is file 1", "file1_link.txt content mismatch");
+    }
+
     Ok(())
 }
 
-// Helper function to verify extracted files with selective mapper (only file1.txt should be
-// extracted)
+// Helper function to create a selective mapper that only extracts certain files
+fn selective_mapper(output_dir: &Path) -> impl FnMut(&Path) -> Option<PathBuf> {
+    move |path: &Path| {
+        if path.file_name().is_some_and(|f| f == "file1.txt") {
+            Some(output_dir.join(path))
+        } else {
+            None
+        }
+    }
+}
+
+// Helper function to verify extracted files with selective mapper
+#[track_caller]
 fn verify_selective_extraction(extract_dir: &Path) -> Result<()> {
     let file1_path = extract_dir.join("file1.txt");
     let file2_path = extract_dir.join("subdir/file2.txt");
@@ -68,26 +120,20 @@ fn verify_selective_extraction(extract_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-// Helper function to create the identity mapper
-fn identity_mapper(output_dir: &Path) -> impl FnMut(&Path) -> Option<PathBuf> + '_ {
-    move |path: &Path| Some(output_dir.join(path))
-}
-
-// Helper function to create a selective mapper that only extracts certain files
-fn selective_mapper(output_dir: &Path) -> impl FnMut(&Path) -> Option<PathBuf> + '_ {
-    move |path: &Path| {
-        if path.to_string_lossy().ends_with("file1.txt") {
-            Some(output_dir.join(path))
-        } else {
-            None
+fn walk_dir(dir: &Path, callback: &mut dyn FnMut(&Path) -> Result<()>) -> Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        callback(&path)?;
+        if path.is_dir() {
+            walk_dir(&path, callback)?;
         }
     }
+    Ok(())
 }
 
 #[cfg(feature = "zip")]
 mod zip_tests {
-    use std::io::Write;
-
     use zip::{ZipWriter, write::FileOptions};
 
     use super::*;
@@ -99,24 +145,26 @@ mod zip_tests {
         let options: FileOptions<()> =
             FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
-        // Add file1.txt
-        let file1_path = source_dir.join("file1.txt");
-        let mut file1_content = Vec::new();
-        File::open(&file1_path)?.read_to_end(&mut file1_content)?;
-        writer.start_file("file1.txt", options)?;
-        writer.write_all(&file1_content)?;
-
-        // Add file2.txt inside subdir
-        let file2_path = source_dir.join("subdir").join("file2.txt");
-        let mut file2_content = Vec::new();
-        File::open(&file2_path)?.read_to_end(&mut file2_content)?;
-
-        // For directories, we need to use this separately since options is moved
-        writer.add_directory("subdir", options)?;
-
-        // And the file needs new options too since the previous ones were moved
-        writer.start_file("subdir/file2.txt", options)?;
-        writer.write_all(&file2_content)?;
+        walk_dir(source_dir, &mut |path| {
+            let relpath = path.strip_prefix(source_dir).unwrap();
+            match path {
+                path if path.is_dir() => {
+                    writer.add_directory_from_path(relpath, options)?;
+                }
+                // Handle symlinks
+                path if path.is_symlink() => {
+                    let target = path.read_link()?;
+                    writer.add_symlink_from_path(relpath, target, options)?;
+                }
+                path if path.is_file() => {
+                    writer.start_file_from_path(relpath, options)?;
+                    let mut file = File::open(path)?;
+                    std::io::copy(&mut file, &mut writer)?;
+                }
+                _ => {}
+            }
+            Ok(())
+        })?;
 
         writer.finish()?;
         Ok(())
@@ -172,6 +220,7 @@ mod tar_tests {
     fn create_tar_archive(source_dir: &Path, archive_path: &Path) -> Result<()> {
         let file = File::create(archive_path)?;
         let mut builder = ::tar::Builder::new(file);
+        builder.follow_symlinks(false);
 
         // Add directory contents to the archive
         builder.append_dir_all(".", source_dir)?;
@@ -234,6 +283,7 @@ mod tar_gz_tests {
         let buf_writer = BufWriter::new(file);
         let gz_encoder = flate2::write::GzEncoder::new(buf_writer, flate2::Compression::default());
         let mut builder = ::tar::Builder::new(gz_encoder);
+        builder.follow_symlinks(false);
 
         // Add directory contents to the archive
         builder.append_dir_all(".", source_dir)?;

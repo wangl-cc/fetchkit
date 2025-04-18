@@ -73,6 +73,7 @@ pub mod none {
     }
 
     #[cfg(test)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     mod tests {
         use super::*;
 
@@ -142,6 +143,7 @@ pub mod size {
     }
 
     #[cfg(test)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     mod tests {
         use super::*;
 
@@ -282,6 +284,7 @@ pub mod digest {
     }
 
     #[cfg(test)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     mod tests {
         use sha2::Sha256;
 
@@ -373,6 +376,7 @@ pub mod minisign {
     }
 
     #[cfg(test)]
+    #[cfg_attr(coverage_nightly, coverage(off))]
     mod tests {
         use minisign_verify::{PublicKey, Signature};
 

@@ -102,6 +102,7 @@ fn get_extension(path: &Path) -> Option<&OsStr> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
