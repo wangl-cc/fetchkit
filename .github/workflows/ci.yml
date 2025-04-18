@@ -55,6 +55,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
       - name: Setup Cache
         uses: Swatinem/rust-cache@v2
       - name: Build
@@ -66,25 +70,6 @@ jobs:
       - name: Test
         run: |
           cargo test --all-features --workspace -- --include-ignored
-
-  coverage:
-    name: Coverage
-    needs: [build]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          # - windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
       - name: Coverage
         run: |
           cargo llvm-cov --all-features --workspace \
