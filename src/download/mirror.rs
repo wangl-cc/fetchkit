@@ -82,7 +82,6 @@ where
     for mirror in mirrors {
         // Safety: Guaranteed by the caller.
         let speed = speedtest(client, mirror.as_ref(), max_bytes, max_time).await;
-        log::debug!("Speedtest result for {}: {:?}", mirror, speed);
         // Do not return error if one mirror fails, just skip it
         match speed {
             Ok(speed) => {
@@ -211,7 +210,12 @@ mod tests {
             { speedtest(&client, "http://slow.mirror.com/file", max_bytes, max_time) }
                 .await
                 .unwrap();
-        assert!(unsafe { fast_mirror_speed.gt(slow_mirror_speed) });
+        assert!(
+            unsafe { fast_mirror_speed.gt(slow_mirror_speed) },
+            "{:?} should be greater than {:?}",
+            fast_mirror_speed,
+            slow_mirror_speed
+        );
 
         let mirrors = &["http://fast.mirror.com/file", "http://slow.mirror.com/file"];
         let fast: &str = fastest_mirror(&client, mirrors.iter(), max_bytes, max_time)
