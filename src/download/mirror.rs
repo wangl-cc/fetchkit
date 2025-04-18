@@ -7,7 +7,7 @@ use futures_util::StreamExt;
 use super::http::{Client, Response};
 use crate::error::{Error, ErrorKind, Result};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 /// A struct to represent either the downloaded bytes or the time taken to download.
 ///
 /// If the download is completed before the time limit, the value will be `Time`.
@@ -82,6 +82,7 @@ where
     for mirror in mirrors {
         // Safety: Guaranteed by the caller.
         let speed = speedtest(client, mirror.as_ref(), max_bytes, max_time).await;
+        log::debug!("Speedtest result for {}: {:?}", mirror, speed);
         // Do not return error if one mirror fails, just skip it
         match speed {
             Ok(speed) => {
@@ -198,7 +199,7 @@ mod tests {
 
         client.add_response("http://slow.mirror.com/file", MockResponse {
             content: content.clone(),
-            chunk_size: 250, //  0.8 seconds to complete
+            chunk_size: 100, //  2.0 seconds to complete
         });
 
         let mirrors = &["http://fast.mirror.com/file", "http://slow.mirror.com/file"];
