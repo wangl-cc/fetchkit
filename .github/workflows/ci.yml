@@ -94,6 +94,7 @@ jobs:
         run: |
           cargo tarpaulin --all-features --workspace \
             --out xml --timeout 120 \
+            --engine llvm \
             ${{ github.run_attempt == 1 && '--skip-clean' || '' }} \
             -- --include-ignored
       - name: Upload to Codecov
