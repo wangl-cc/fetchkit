@@ -188,22 +188,33 @@ mod tests {
     async fn test_find_fastest() {
         // Create a mock client
         let mut client = MockClient::default();
+        let content_size = 10000;
+        let max_bytes = 3000;
+        let max_time = Duration::from_secs(1);
 
         // Set up two mirrors with the same speed (both complete within time limit)
-        let content = Bytes::from_iter(std::iter::repeat_n(0u8, 10000));
-
+        let content = Bytes::from_iter(std::iter::repeat_n(0u8, content_size));
         client.add_response("http://fast.mirror.com/file", MockResponse {
             content: content.clone(),
             chunk_size: 1024, // 0.2 seconds to complete
         });
-
         client.add_response("http://slow.mirror.com/file", MockResponse {
             content: content.clone(),
             chunk_size: 100, //  2.0 seconds to complete
         });
 
+        let fast_mirror_speed =
+            { speedtest(&client, "http://fast.mirror.com/file", max_bytes, max_time) }
+                .await
+                .unwrap();
+        let slow_mirror_speed =
+            { speedtest(&client, "http://slow.mirror.com/file", max_bytes, max_time) }
+                .await
+                .unwrap();
+        assert!(unsafe { fast_mirror_speed.gt(slow_mirror_speed) });
+
         let mirrors = &["http://fast.mirror.com/file", "http://slow.mirror.com/file"];
-        let fast: &str = fastest_mirror(&client, mirrors.iter(), 2000, Duration::from_secs(1))
+        let fast: &str = fastest_mirror(&client, mirrors.iter(), max_bytes, max_time)
             .await
             .unwrap();
         assert_eq!(fast, "http://fast.mirror.com/file");
